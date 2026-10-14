@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Printer</title>
+<style>
+:root{--desk:#1e2a35;--desk2:#2a3946;--line:#3b4d5c;--paper:#fdfdfb;--ink:#101820;--mut:#93a5b5;--fg:#e8eef3;--pink:#ff5c8a}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--desk);color:var(--fg);font:16px/1.5 system-ui,Roboto,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--line)}
+h1{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+#st{color:var(--mut);margin-right:12px}
+#st.ok{color:#7ee0a6}
+button,select,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--desk2);border-radius:8px;padding:8px 16px}
+button:hover{border-color:var(--mut)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--pink);outline-offset:2px}
+button.primary{background:var(--pink);border-color:var(--pink);color:#2a0612;font-weight:700}
+button:disabled{opacity:.6;cursor:wait}
+#warn{margin:16px 24px 0;padding:12px 16px;border:1px solid var(--pink);border-radius:8px}
+main{display:grid;grid-template-columns:minmax(0,1fr) 440px;gap:32px;padding:24px;max-width:1000px;margin:0 auto}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.tabs button{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 16px;color:var(--mut)}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--pink)}
+.row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:12px 0}
+label{display:flex;gap:8px;align-items:center;color:var(--mut)}
+textarea,input[type=number],input[type=text],select{background:var(--desk2);border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+textarea{width:100%;height:160px;resize:vertical}
+input[type=number]{width:80px}input[type=text]{width:140px}
+input[type=range]{accent-color:var(--pink)}
+details{margin-top:28px;border-top:1px solid var(--line);padding-top:12px;color:var(--mut)}
+summary{cursor:pointer}
+.stage{display:flex;flex-direction:column;align-items:center;gap:16px}
+.paper{width:384px;max-width:100%;background:var(--paper);box-shadow:0 12px 30px rgba(0,0,0,.45);padding:0 0 18px;
+ -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 100% repeat-x;
+ mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) bottom/16px 100% repeat-x}
+#pv{display:block;width:100%;height:auto;min-height:40px}
+.hint{color:var(--mut);font-size:14px;margin:0}
+#log{width:384px;max-width:100%;max-height:180px;overflow:auto;margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#16202a;color:var(--mut);font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+  <h1>Cat Printer</h1>
+  <div><span id="st">Not connected</span><button id="conn" class="primary">Connect printer</button></div>
+</header>
+<div id="warn" hidden>This browser can't use Web Bluetooth. Open this file in Chrome on your Chromebook (or Chrome on desktop), with Bluetooth turned on.</div>
+
+<main>
+  <section>
+    <nav class="tabs">
+      <button data-t="text" class="on">Text</button>
+      <button data-t="image">Image</button>
+      <button data-t="sudoku">Sudoku</button>
+    </nav>
+
+    <div id="p-text">
+      <textarea id="txt" class="live" aria-label="Text to print">Hello, cat!</textarea>
+      <div class="row">
+        <label>Size <input id="fs" class="live" type="number" min="12" max="96" value="32"></label>
+        <label>Align <select id="al" class="live"><option>left</option><option>center</option><option>right</option></select></label>
+        <label><input id="bd" class="live" type="checkbox"> Bold</label>
+      </div>
+    </div>
+
+    <div id="p-image" hidden>
+      <div class="row"><input id="file" type="file" accept="image/*"></div>
+      <div class="row">
+        <label><input id="dith" class="live" type="checkbox" checked> Dither</label>
+        <label>Cutoff <input id="thr" class="live" type="range" min="40" max="220" value="128"></label>
+      </div>
+    </div>
+
+    <div id="p-sudoku" hidden>
+      <div class="row">
+        <label>Difficulty <select id="diff">
+          <option value="easy">Easy</option><option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option><option value="expert">Expert</option></select></label>
+        <button id="newp">New puzzle</button>
+      </div>
+      <div class="row">
+        <label>Seed <input id="seed" type="text" inputmode="numeric"></label>
+        <label><input id="key" class="live" type="checkbox"> Show answers</label>
+      </div>
+      <p class="hint">The seed is printed on the sheet. Enter it later and tick "Show answers" to print the answer key.</p>
+    </div>
+
+    <details>
+      <summary>Printer settings</summary>
+      <div class="row">
+        <label>Darkness <input id="en" type="range" min="8000" max="40000" step="500" value="30000"></label>
+        <label>Paper feed <input id="fd" type="number" min="0" max="500" value="80"></label>
+      </div>
+      <div class="row">
+        <label>Speed <select id="sp"><option value="6" selected>Fast</option><option value="15">Normal</option><option value="30">Reliable</option></select></label>
+        <button id="feed" type="button">Feed paper</button>
+      </div>
+      <p class="hint">Printing garbled or nothing? Use Reliable. "Feed paper" is a quick test that the printer hears you.</p>
+      <p class="hint">Prints too faint? Move Darkness right.</p>
+    </details>
+  </section>
+
+  <section class="stage">
+    <div class="paper"><canvas id="pv" width="384" height="40"></canvas></div>
+    <button id="print" class="primary">Print</button>
+    <pre id="log" hidden aria-live="polite"></pre>
+  </section>
+</main>
+
+<script>
+const W = 384, $ = s => document.querySelector(s), sleep = ms => new Promise(r => setTimeout(r, ms));
+const mk = (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h });
+
+/* ---------- printer protocol ---------- */
+const CRC = new Uint8Array(256).map((_, i) => { let c = i; for (let b = 0; b < 8; b++) c = c & 128 ? ((c << 1) ^ 7) & 255 : (c << 1) & 255; return c; });
+const crc = d => d.reduce((c, b) => CRC[c ^ b], 0);
+const pkt = (cmd, d = []) => {
+  d = Uint8Array.from(d);
+  const p = new Uint8Array(8 + d.length);
+  p.set([0x51, 0x78, cmd, 0, d.length & 255, d.length >> 8]); p.set(d, 6);
+  p[6 + d.length] = crc(d); p[7 + d.length] = 0xff;
+  return p;
+};
+const le = n => [n & 255, (n >> 8) & 255];
+const LAT_ON = [0xaa, 0x55, 0x17, 0x38, 0x44, 0x5f, 0x5f, 0x5f, 0x44, 0x38, 0x2c];
+const LAT_OFF = [0xaa, 0x55, 0x17, 0, 0, 0, 0, 0, 0, 0, 0x17];
+const job = (rows, energy, feed) => [
+  pkt(0xa3, [0]), pkt(0xa4, [0x32]), pkt(0xa6, LAT_ON), pkt(0xaf, le(energy)), pkt(0xbe, [1]), pkt(0xa9, [0]),
+  ...rows.map(r => pkt(0xa2, r)), pkt(0xa1, le(feed)), pkt(0xa6, LAT_OFF), pkt(0xa3, [0]),
+];
+
+/* ---------- bluetooth ---------- */
+let tx = null, devRef = null, paused = false, waiters = [];
+const CHUNK = 20;
+const hex = d => [...d].map(b => b.toString(16).padStart(2, '0')).join(' ');
+const log = (...a) => { const l = $('#log'); l.hidden = false; l.textContent += a.join(' ') + '\n'; l.scrollTop = l.scrollHeight; console.log(...a); };
+window.addEventListener('error', e => log('Error:', e.message));
+window.addEventListener('unhandledrejection', e => log('Error:', e.reason?.message || e.reason));
+function setStatus(t, ok) { const s = $('#st'); s.textContent = t; s.classList.toggle('ok', !!ok); }
+
+async function attach(dev) {
+  const svc = await (await dev.gatt.connect()).getPrimaryService(0xae30);
+  tx = await svc.getCharacteristic(0xae01);
+  log('AE01 supports:', ['read', 'write', 'writeWithoutResponse', 'notify'].filter(k => tx.properties[k]).join(', ') || 'unknown');
+  try {
+    const rx = await svc.getCharacteristic(0xae02);
+    rx.addEventListener('characteristicvaluechanged', e => {
+      const v = e.target.value, d = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+      log('printer:', hex(d));
+      if (d.length > 6 && d[0] === 0x51 && d[1] === 0x78 && d[2] === 0xae) {
+        paused = d[6] === 0x10;
+        if (!paused) waiters.splice(0).forEach(w => w());
+      }
+    });
+    await rx.startNotifications();
+  } catch (e) { log('No notifications:', e.message); }
+}
+async function connect() {
+  try {
+    devRef = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [0xae30] });
+    devRef.addEventListener('gattserverdisconnected', () => { tx = null; setStatus('Disconnected'); log('Printer disconnected'); });
+    setStatus('Connecting…');
+    await attach(devRef);
+    setStatus('Connected to ' + (devRef.name || 'printer'), true);
+    log('Connected.');
+  } catch (e) {
+    tx = null;
+    setStatus(e.name === 'NotFoundError' ? 'Not connected' : 'Could not connect');
+    if (e.name !== 'NotFoundError') log('Connect failed:', e.message);
+  }
+}
+async function resume() {
+  if (!paused) return;
+  await new Promise(res => {
+    const t = setTimeout(() => { paused = false; res(); }, 4000);
+    waiters.push(() => { clearTimeout(t); res(); });
+  });
+}
+const write = b => tx.writeValueWithoutResponse ? tx.writeValueWithoutResponse(b) : tx.writeValue(b);
+async function send(pkts, onProgress) {
+  for (let n = 0; n < pkts.length; n++) {
+    const b = pkts[n];
+    for (let i = 0; i < b.length; i += CHUNK) {
+      await resume();
+      await write(b.slice(i, i + CHUNK));   // slice = fresh copy, so no view/offset quirks
+      await sleep(+$('#sp').value);
+    }
+    if (n === 0) log('First packet sent:', hex(b));
+    onProgress(n + 1, pkts.length);
+  }
+  await sleep(2500);
+}
+
+/* ---------- rendering ---------- */
+function toGray(c) {
+  const { data } = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+  const g = new Uint8Array(c.width * c.height);
+  for (let i = 0; i < g.length; i++) {
+    const a = data[i * 4 + 3] / 255;
+    g[i] = (0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]) * a + 255 * (1 - a);
+  }
+  return { g, w: c.width, h: c.height };
+}
+function bitmap({ g, w, h }, dither, th) {
+  const o = new Uint8Array(w * h), b = dither ? Float32Array.from(g) : g;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, old = b[i], nw = old < th ? 0 : 255;
+    o[i] = nw ? 0 : 1;
+    if (dither) {
+      const e = old - nw;
+      if (x + 1 < w) b[i + 1] += e * 7 / 16;
+      if (y + 1 < h) { if (x) b[i + w - 1] += e * 3 / 16; b[i + w] += e * 5 / 16; if (x + 1 < w) b[i + w + 1] += e / 16; }
+    }
+  }
+  return o;
+}
+function rows({ bits, w, h }) {
+  const r = [];
+  for (let y = 0; y < h; y++) {
+    const b = new Uint8Array(48);
+    for (let x = 0; x < w; x++) if (bits[y * w + x]) b[x >> 3] |= 1 << (x & 7);
+    r.push(b);
+  }
+  return r;
+}
+
+function textSheet() {
+  const fs = +$('#fs').value || 32, al = $('#al').value, pad = 8, mw = W - pad * 2;
+  const font = `${$('#bd').checked ? 'bold ' : ''}${fs}px sans-serif`;
+  const m = mk(W, 10).getContext('2d'); m.font = font;
+  const lines = [];
+  for (const p of $('#txt').value.split('\n')) {
+    let l = '';
+    for (let wd of p.split(/\s+/).filter(Boolean)) {
+      if (m.measureText(l ? l + ' ' + wd : wd).width <= mw) { l = l ? l + ' ' + wd : wd; continue; }
+      if (l) lines.push(l);
+      while (m.measureText(wd).width > mw) {
+        let k = wd.length;
+        while (k > 1 && m.measureText(wd.slice(0, k)).width > mw) k--;
+        lines.push(wd.slice(0, k)); wd = wd.slice(k);
+      }
+      l = wd;
+    }
+    lines.push(l);
+  }
+  const lh = Math.round(fs * 1.25), h = Math.max(lh, lines.length * lh + pad * 2);
+  const c = mk(W, h), x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, W, h); x.fillStyle = '#000';
+  x.font = font; x.textBaseline = 'top'; x.textAlign = al;
+  const tx0 = al === 'center' ? W / 2 : al === 'right' ? W - pad : pad;
+  lines.forEach((l, i) => x.fillText(l, tx0, pad + i * lh));
+  return toGray(c);
+}
+
+let imgBmp = null;
+function imageSheet() {
+  if (!imgBmp) return null;
+  const h = Math.max(1, Math.round(imgBmp.height * W / imgBmp.width)), c = mk(W, h), x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, W, h); x.drawImage(imgBmp, 0, 0, W, h);
+  return toGray(c);
+}
+
+/* ---------- sudoku ---------- */
+const DIFF = {
+  easy:   { target: 40, singles: true,  beyond: false, tries: 1 },
+  medium: { target: 32, singles: true,  beyond: false, tries: 3 },
+  hard:   { target: 28, singles: false, beyond: true,  tries: 3 },
+  expert: { target: 22, singles: false, beyond: true,  tries: 5 },
+};
+const R = [], C = [], B = [];
+for (let i = 0; i < 81; i++) { R[i] = (i / 9) | 0; C[i] = i % 9; B[i] = ((R[i] / 3) | 0) * 3 + ((C[i] / 3) | 0); }
+const POP = [...Array(512)].map((_, m) => { let n = 0; for (; m; m &= m - 1) n++; return n; });
+const UN = [];
+for (let u = 0; u < 9; u++) {
+  const a = [...Array(9)];
+  UN.push(a.map((_, k) => u * 9 + k), a.map((_, k) => k * 9 + u),
+    a.map((_, k) => (((u / 3) | 0) * 3 + ((k / 3) | 0)) * 9 + (u % 3) * 3 + (k % 3)));
+}
+const st = g => {
+  const s = { g: g.slice(), r: Array(9).fill(0), c: Array(9).fill(0), b: Array(9).fill(0) };
+  s.g.forEach((v, i) => { if (v) { const t = 1 << (v - 1); s.r[R[i]] |= t; s.c[C[i]] |= t; s.b[B[i]] |= t; } });
+  return s;
+};
+const cand = (s, i) => ~(s.r[R[i]] | s.c[C[i]] | s.b[B[i]]) & 511;
+const put = (s, i, d) => { const t = 1 << d; s.g[i] = d + 1; s.r[R[i]] |= t; s.c[C[i]] |= t; s.b[B[i]] |= t; };
+const take = (s, i, d) => { const t = ~(1 << d); s.g[i] = 0; s.r[R[i]] &= t; s.c[C[i]] &= t; s.b[B[i]] &= t; };
+
+function rng32(a) {
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0; let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function shuffle(a, rnd) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function seedFrom(s) {
+  if (/^\d+$/.test(s)) return Number(s) >>> 0;
+  let h = 5381; for (const ch of s) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0; return h;
+}
+function countSol(p, limit = 2) {
+  const s = st(p); let n = 0;
+  const rec = () => {
+    let best = -1, bm = 0, bn = 10;
+    for (let i = 0; i < 81; i++) {
+      if (s.g[i]) continue;
+      const m = cand(s, i), k = POP[m];
+      if (!k) return;
+      if (k < bn) { best = i; bm = m; bn = k; if (k === 1) break; }
+    }
+    if (best < 0) { n++; return; }
+    for (let d = 0; d < 9; d++) {
+      if (!(bm & (1 << d))) continue;
+      put(s, best, d); rec(); take(s, best, d);
+      if (n >= limit) return;
+    }
+  };
+  rec(); return n;
+}
+function bySingles(p) {
+  const s = st(p); let go = true;
+  while (go) {
+    go = false;
+    for (let i = 0; i < 81; i++) {
+      if (s.g[i]) continue;
+      const m = cand(s, i);
+      if (!m) return false;
+      if (POP[m] === 1) { put(s, i, Math.log2(m)); go = true; }
+    }
+    for (const u of UN) for (let d = 0; d < 9; d++) {
+      let only = -1, n = 0;
+      for (const i of u) if (!s.g[i] && (cand(s, i) & (1 << d))) { n++; only = i; if (n > 1) break; }
+      if (n === 1) { put(s, only, d); go = true; }
+    }
+  }
+  return s.g.every(Boolean);
+}
+function genSolution(rnd) {
+  const s = st(Array(81).fill(0));
+  const rec = pos => {
+    if (pos === 81) return true;
+    const m = cand(s, pos);
+    for (const d of shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8], rnd)) {
+      if (!(m & (1 << d))) continue;
+      put(s, pos, d);
+      if (rec(pos + 1)) return true;
+      take(s, pos, d);
+    }
+    return false;
+  };
+  rec(0); return s.g;
+}
+function dig(sol, rnd, cfg) {
+  const p = sol.slice(); let clues = 81;
+  for (const i of shuffle([...Array(81).keys()], rnd)) {
+    if (clues <= cfg.target) break;
+    const v = p[i]; p[i] = 0;
+    if (countSol(p) === 1 && (!cfg.singles || bySingles(p))) clues--; else p[i] = v;
+  }
+  return p;
+}
+function genPuzzle(diff, seed) {
+  const cfg = DIFF[diff], rnd = rng32(seed), solution = genSolution(rnd);
+  let best = null, valid = 0;
+  for (let t = 0; t < cfg.tries * 6 && valid < cfg.tries; t++) {
+    const puzzle = dig(solution, rnd, cfg), clues = puzzle.filter(Boolean).length;
+    const ok = !cfg.beyond || !bySingles(puzzle);
+    if (ok) valid++;
+    if (!best || (ok && !best.ok) || (ok === best.ok && clues < best.clues)) best = { puzzle, clues, ok };
+  }
+  return { puzzle: best.puzzle, solution, clues: best.clues, seed, diff };
+}
+let game = null;
+function newPuzzle(seedText) {
+  const seed = seedText ? seedFrom(seedText) : Math.floor(Math.random() * 1e6);
+  game = genPuzzle($('#diff').value, seed);
+  $('#seed').value = seed;
+  refresh();
+}
+function sudokuSheet() {
+  if (!game) newPuzzle();
+  const g = game, key = $('#key').checked, M = 12, cell = 40, S = 360, gy = 72, h = gy + S + 56;
+  const c = mk(W, h), x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, W, h); x.fillStyle = '#000';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = 'bold 34px sans-serif'; x.fillText(key ? 'SOLUTION' : 'SUDOKU', W / 2, 28);
+  x.font = '20px sans-serif'; x.fillText(g.diff[0].toUpperCase() + g.diff.slice(1), W / 2, 56);
+  for (let i = 0; i <= 9; i++) {
+    const k = i % 3 === 0, t = k ? 4 : 2, e = k ? 2 : 0;
+    x.fillRect(M + i * cell - t / 2, gy - e, t, S + e * 2);
+    x.fillRect(M - e, gy + i * cell - t / 2, S + e * 2, t);
+  }
+  for (let i = 0; i < 81; i++) {
+    const v = g.puzzle[i] || (key ? g.solution[i] : 0);
+    if (!v) continue;
+    x.font = (g.puzzle[i] ? 'bold 28px' : '26px') + ' sans-serif';
+    x.fillText(v, M + C[i] * cell + 20, gy + R[i] * cell + 22);
+  }
+  x.font = '16px sans-serif'; x.fillText(`${g.clues} clues, seed ${g.seed}`, W / 2, gy + S + 30);
+  return toGray(c);
+}
+
+/* ---------- UI ---------- */
+let tab = 'text', cur = null;
+function refresh() {
+  const s = tab === 'text' ? textSheet() : tab === 'image' ? imageSheet() : sudokuSheet();
+  const pv = $('#pv'); cur = null;
+  if (!s) { pv.width = W; pv.height = 40; return; }
+  const img = tab === 'image';
+  const bits = bitmap(s, img && $('#dith').checked, img ? +$('#thr').value : 128);
+  pv.width = s.w; pv.height = s.h;
+  const x = pv.getContext('2d'), d = x.createImageData(s.w, s.h);
+  for (let i = 0; i < bits.length; i++) { const v = bits[i] ? 0 : 255; d.data.set([v, v, v, 255], i * 4); }
+  x.putImageData(d, 0, 0);
+  cur = { bits, w: s.w, h: s.h };
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  tab = b.dataset.t;
+  document.querySelectorAll('.tabs button').forEach(o => o.classList.toggle('on', o === b));
+  ['text', 'image', 'sudoku'].forEach(t => $('#p-' + t).hidden = t !== tab);
+  refresh();
+});
+document.querySelectorAll('.live').forEach(el => el.addEventListener('input', refresh));
+$('#file').onchange = async e => { const f = e.target.files[0]; if (f) { imgBmp = await createImageBitmap(f); refresh(); } };
+$('#diff').onchange = () => newPuzzle();
+$('#newp').onclick = () => newPuzzle();
+$('#seed').onchange = e => newPuzzle(e.target.value.trim());
+$('#conn').onclick = connect;
+$('#feed').onclick = async () => {
+  if (!tx) return log('Not connected. Click "Connect printer" first.');
+  log('Feeding paper…');
+  try { await send([pkt(0xa1, le(120))], () => {}); log('Feed command sent.'); } catch (e) { log('Feed failed:', e.message); }
+};
+$('#print').onclick = async () => {
+  log('Print clicked.');
+  if (!cur) return log('Nothing to print yet.');
+  if (!tx && devRef) {
+    try { setStatus('Reconnecting…'); await attach(devRef); setStatus('Connected to ' + (devRef.name || 'printer'), true); }
+    catch (e) { setStatus('Disconnected'); log('Reconnect failed:', e.message); }
+  }
+  if (!tx) return log('Not connected. Click "Connect printer" first.');
+  const b = $('#print'), label = b.textContent; b.disabled = true;
+  try {
+    const pk = job(rows(cur), +$('#en').value, +$('#fd').value);
+    const t0 = Date.now();
+    log(`Sending ${pk.length} packets (${cur.h} lines), ${$('#sp').value} ms between chunks…`);
+    await send(pk, (i, n) => b.textContent = `Printing ${Math.round(i / n * 100)}%`);
+    log(`Done in ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
+  } catch (e) { log('Print failed:', e.name, e.message); }
+  b.textContent = label; b.disabled = false;
+};
+if (!navigator.bluetooth) { $('#warn').hidden = false; $('#conn').disabled = true; }
+refresh();
+</script>
+</body>
+</html>
